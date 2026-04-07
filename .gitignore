@@ -1,0 +1,9 @@
+# runtime data – never commit these
+elasticsearch-data/
+filebeat-data/
+
+# editor artefacts
+.idea/
+.vscode/
+*.swp
+*.swo

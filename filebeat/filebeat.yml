@@ -1,0 +1,51 @@
+# Filebeat configuration for collecting all Docker container logs
+# Uses Docker autodiscovery so new containers are picked up automatically.
+
+filebeat.autodiscover:
+  providers:
+    - type: docker
+      # Enable hints-based autodiscovery: containers can opt-in to extra config
+      # via Docker labels (e.g. co.elastic.logs/multiline.*).
+      hints.enabled: true
+      # Include all containers by default (no filter on project or image)
+      templates:
+        # Opt-out: containers with label co.elastic.logs/enabled=false are skipped
+        - condition:
+            equals:
+              docker.container.labels.co.elastic.logs/enabled: "false"
+          config:
+            - type: container
+              enabled: false
+        # Default: collect logs from every other container
+        - config:
+            - type: container
+              paths:
+                - /var/lib/docker/containers/${data.docker.container.id}/*.log
+
+# Enrich every log event with Docker metadata (image, container name, labels, etc.)
+processors:
+  - add_docker_metadata:
+      host: "unix:///var/run/docker.sock"
+  - add_host_metadata: ~
+  - add_fields:
+      target: ""
+      fields:
+        log_collector: filebeat
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  # One index per day, prefixed so all container logs are easy to find
+  index: "docker-logs-%{+yyyy.MM.dd}"
+
+# Point Filebeat at Kibana so it can push the index template & dashboard
+setup.kibana:
+  host: "kibana:5601"
+
+setup.template.name: "docker-logs"
+setup.template.pattern: "docker-logs-*"
+# Disable ILM so the simple date-based index pattern works without a license
+setup.ilm.enabled: false
+
+# Reduce noise in Filebeat's own logs
+logging.level: warning
+logging.to_files: false
