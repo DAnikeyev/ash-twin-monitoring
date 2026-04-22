@@ -7,3 +7,10 @@ filebeat-data/
 .vscode/
 *.swp
 *.swo
+scripts/
+
+# local secrets
+.env.secrets
+.env.local
+.env
+

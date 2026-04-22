@@ -4,7 +4,7 @@ A self-contained **ELK + Filebeat** stack that collects **all Docker container l
 
 - **Elasticsearch** – stores and indexes log data  
 - **Filebeat** – scrapes every container's logs automatically (no per-project changes needed)  
-- **Kibana** – browser-accessible dashboard at `http://<your-vps-ip>:5601`
+- **Kibana** – browser-accessible dashboard via your reverse-proxy domain (for example `https://kibana.example.com`)
 
 Because Filebeat uses Docker autodiscovery, any container you deploy later — from any other `docker compose` project — is picked up automatically without any extra configuration.
 
@@ -31,9 +31,12 @@ Because Filebeat uses Docker autodiscovery, any container you deploy later — f
 | Docker ≥ 20.10 | `docker --version` |
 | Docker Compose plugin ≥ 2.x | `docker compose version` |
 | Docker context pointing at your VPS | `docker context use myvps` |
-| TCP 5601 open in your VPS firewall | Kibana web UI |
-| TCP 9200 open (optional) | Elasticsearch direct access |
+| Reverse proxy in front of Kibana | Nginx/Caddy/Traefik forwarding to `127.0.0.1:5601` |
+| DNS record for your Kibana domain | Example: `kibana.example.com -> <vps-ip>` |
+| TCP 80/443 open in your VPS firewall | Public HTTP/HTTPS access |
 | ≥ 2 GB RAM on the VPS | Elasticsearch needs at least 512 MB heap |
+
+> This stack is designed for a Linux Docker host (for example a VPS). Running `docker compose` from Windows or macOS is fine **when your active Docker context points at that Linux host**.
 
 ---
 
@@ -44,23 +47,31 @@ Because Filebeat uses Docker autodiscovery, any container you deploy later — f
 git clone https://github.com/DAnikeyev/ash-twin-monitoring.git
 cd ash-twin-monitoring
 
-# 2. (Optional) Tune settings in .env
-#    e.g. increase ES_JAVA_OPTS if you have more RAM available
+# 2. Create your local .env from the template (never commit this file)
+cp .env.example .env
+
+# 3. Edit .env — fill in all empty values:
+#    ELASTIC_PASSWORD=<strong password>
+#    KIBANA_LOGIN_PASSWORD=<your Kibana password>
+#    KIBANA_SERVICE_TOKEN=<generated later, see comments in .env>
+#    Optionally adjust KIBANA_PUBLIC_BASE_URL, ES_JAVA_OPTS, etc.
 nano .env
 
-# 3. Point Docker at your VPS
+# 4. Point Docker at your VPS
 docker context use myvps
 
-# 4. Start the stack (detached)
-docker compose up -d
+# 5. Start the stack (detached)
+docker compose up -d --build
 ```
+
+The first run builds a small custom `filebeat` image that embeds `filebeat/filebeat.yml`. This avoids client-side bind mount path issues when you launch the stack from Windows against a remote Linux Docker context.
 
 Docker will pull the images and start three containers:
 
 | Container | Image | Port |
 |---|---|---|
-| `elasticsearch` | `docker.elastic.co/elasticsearch/elasticsearch` (version from `.env`) | 9200 |
-| `kibana` | `docker.elastic.co/kibana/kibana` (version from `.env`) | **5601** |
+| `elasticsearch` | `docker.elastic.co/elasticsearch/elasticsearch` (version from `.env`) | `127.0.0.1:9200` (default) |
+| `kibana` | `docker.elastic.co/kibana/kibana` (version from `.env`) | `127.0.0.1:5601` (default) |
 | `filebeat` | `docker.elastic.co/beats/filebeat` (version from `.env`) | – |
 
 Kibana takes ~30–60 seconds to become ready after Elasticsearch is healthy.
@@ -72,12 +83,17 @@ Kibana takes ~30–60 seconds to become ready after Elasticsearch is healthy.
 Open your browser and navigate to:
 
 ```
-http://<your-vps-ip>:5601
+https://kibana.example.com
 ```
 
-Replace `<your-vps-ip>` with the public IP address of your VPS (e.g. `http://203.0.113.42:5601`).
+Replace `kibana.example.com` with your actual domain (for example `kibana.ash-twin.com`).
 
-> **Tip:** If you use a domain name, point an A record at your VPS IP and update `SERVER_PUBLICBASEURL` in `docker-compose.yml` accordingly.
+Kibana now requires login. Sign in with the values from your `.env`, for example:
+
+- Username: `anikeyev`
+- Password: value of `KIBANA_LOGIN_PASSWORD`
+
+> **Tip:** Keep Kibana and Elasticsearch bound to `127.0.0.1` and expose only nginx on 80/443.
 
 ---
 
@@ -164,7 +180,7 @@ container.image.name: "nginx*"
 
 ## 7. Configuration reference
 
-All tuneable values live in `.env`:
+All tuneable values live in `.env` (git-ignored):
 
 | Variable | Default | Description |
 |---|---|---|
@@ -172,6 +188,15 @@ All tuneable values live in `.env`:
 | `ES_JAVA_OPTS` | `-Xms512m -Xmx512m` | Elasticsearch JVM heap (increase for heavy load) |
 | `KIBANA_PORT` | `5601` | Host port for Kibana |
 | `ELASTICSEARCH_PORT` | `9200` | Host port for Elasticsearch |
+| `KIBANA_BIND_HOST` | `127.0.0.1` | Host interface for Kibana port binding |
+| `ELASTICSEARCH_BIND_HOST` | `127.0.0.1` | Host interface for Elasticsearch port binding |
+| `KIBANA_PUBLIC_BASE_URL` | `http://localhost:${KIBANA_PORT}` | External URL users open in browser |
+| `KIBANA_SERVER_NAME` | `localhost` | Kibana server name used by Kibana config |
+| `ELASTIC_USERNAME` | `elastic` | Service username used by Kibana/Filebeat when talking to Elasticsearch |
+| `ELASTIC_PASSWORD` | *(required)* | Password for the built-in `elastic` user |
+| `KIBANA_LOGIN_USERNAME` | *(required)* | Kibana UI login user created automatically (e.g. `anikeyev`) |
+| `KIBANA_LOGIN_PASSWORD` | *(required)* | Password for `KIBANA_LOGIN_USERNAME` |
+| `KIBANA_SERVICE_TOKEN` | *(required)* | Service-account token for Kibana → Elasticsearch |
 
 Edit `.env` and run `docker compose up -d` again to apply changes.
 
@@ -194,11 +219,23 @@ labels:
 
 - Wait 1–2 minutes after startup for Filebeat to ship the first batch.  
 - Check Filebeat is running: `docker compose logs filebeat`  
-- Check Elasticsearch is healthy: `curl http://<vps-ip>:9200/_cluster/health`  
+- Check Elasticsearch is healthy from the VPS host: `curl -u elastic:$ELASTIC_PASSWORD http://127.0.0.1:9200/_cluster/health`  
+
+**Kibana URL is not reachable**
+
+- Verify DNS for your domain points to the VPS public IP.  
+- Verify nginx forwards to `127.0.0.1:5601`.  
+- Verify TLS certificate is installed for the domain.  
 
 **Filebeat permission errors**
 
 Filebeat requires read access to `/var/lib/docker/containers`. The `user: root` setting in `docker-compose.yml` handles this. If you see `permission denied`, verify the host Docker data directory matches `/var/lib/docker/containers`.
+
+**`invalid volume specification` on Windows**
+
+If the error mentions a Windows path such as `C:\...\filebeat\filebeat.yml`, pull the latest version of this repository and run `docker compose up -d` again. The Filebeat config is now baked into the image instead of bind-mounted from your workstation.
+
+If you are targeting **local Docker Desktop on Windows**, `filebeat` still cannot read `/var/lib/docker/containers` from the Windows host. In that case, use a remote Linux Docker host/VPS (the supported setup for this repo) or redesign log collection for Docker Desktop.
 
 **Out of disk space**
 
