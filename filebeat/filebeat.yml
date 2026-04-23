@@ -11,7 +11,7 @@ filebeat.autodiscover:
       hints.default_config:
         type: container
         paths:
-          - /var/lib/docker/containers/${data.docker.container.id}/*.log
+          - /var/lib/docker/containers/${data.container.id}/*.log
 
 # Enrich every log event with Docker metadata (image, container name, labels, etc.)
 processors:

@@ -15,7 +15,7 @@ services:
     networks:
       - elk
     restart: unless-stopped
-    mem_limit: 1536m
+    mem_limit: 1g
     labels:
       co.elastic.logs/enabled: "false"
     healthcheck:
@@ -67,7 +67,7 @@ services:
       kibana-user-setup:
         condition: service_completed_successfully
     restart: unless-stopped
-    mem_limit: 1024m
+    mem_limit: 256m
     labels:
       co.elastic.logs/enabled: "false"
 
@@ -93,7 +93,7 @@ services:
       elasticsearch:
         condition: service_healthy
     restart: unless-stopped
-    mem_limit: 256m
+    mem_limit: 128m
     labels:
       co.elastic.logs/enabled: "false"
 
