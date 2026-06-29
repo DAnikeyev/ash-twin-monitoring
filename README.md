@@ -185,13 +185,17 @@ All tuneable values live in `.env` (git-ignored):
 | Variable | Default | Description |
 |---|---|---|
 | `ELASTIC_VERSION` | `8.12.2` | Version of all three images |
-| `ES_JAVA_OPTS` | `-Xms512m -Xmx512m` | Elasticsearch JVM heap (increase for heavy load) |
+| `ES_JAVA_OPTS` | `-Xms384m -Xmx384m` | Elasticsearch JVM heap (increase for heavy load) |
+| `ELASTICSEARCH_MEM_LIMIT` | `1g` | Docker memory cap for the Elasticsearch container |
 | `KIBANA_PORT` | `5601` | Host port for Kibana |
 | `ELASTICSEARCH_PORT` | `9200` | Host port for Elasticsearch |
 | `KIBANA_BIND_HOST` | `127.0.0.1` | Host interface for Kibana port binding |
 | `ELASTICSEARCH_BIND_HOST` | `127.0.0.1` | Host interface for Elasticsearch port binding |
 | `KIBANA_PUBLIC_BASE_URL` | `http://localhost:${KIBANA_PORT}` | External URL users open in browser |
 | `KIBANA_SERVER_NAME` | `localhost` | Kibana server name used by Kibana config |
+| `DOCKER_LOG_MAX_SIZE` | `10m` | Maximum size of each Docker JSON log file for this stack's containers |
+| `DOCKER_LOG_MAX_FILE` | `1` | Number of rotated Docker JSON log files kept for this stack's containers |
+| `DOCKER_LOG_RETENTION` | `1d` | How long Elasticsearch keeps indexed `docker-logs-*` data before ILM deletes it |
 | `ELASTIC_USERNAME` | `elastic` | Service username used by Kibana/Filebeat when talking to Elasticsearch |
 | `ELASTIC_PASSWORD` | *(required)* | Password for the built-in `elastic` user |
 | `KIBANA_LOGIN_USERNAME` | *(required)* | Kibana UI login user created automatically (e.g. `anikeyev`) |
@@ -199,6 +203,8 @@ All tuneable values live in `.env` (git-ignored):
 | `KIBANA_SERVICE_TOKEN` | *(required)* | Service-account token for Kibana → Elasticsearch |
 
 Edit `.env` and run `docker compose up -d` again to apply changes.
+
+If you change `DOCKER_LOG_RETENTION`, re-run `scripts/setup-ilm.sh` once on the Docker host so Elasticsearch picks up the new delete window.
 
 ---
 
@@ -239,7 +245,7 @@ If you are targeting **local Docker Desktop on Windows**, `filebeat` still canno
 
 **Out of disk space**
 
-Indices grow over time. Consider adding an ILM (Index Lifecycle Management) policy in Kibana (**Stack Management → Index Lifecycle Policies**) to delete old indices automatically.
+The stack now keeps only the most recent local Docker JSON log for its own containers (`DOCKER_LOG_MAX_FILE=1`) and relies on the `docker-logs-policy` ILM policy for indexed logs. Reduce `DOCKER_LOG_RETENTION` in `.env` and re-run `scripts/setup-ilm.sh` if you want Elasticsearch to delete logs sooner.
 
 **Updating to a newer ELK version**
 

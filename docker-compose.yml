@@ -1,4 +1,10 @@
 
+x-default-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+    max-file: "${DOCKER_LOG_MAX_FILE:-1}"
+
 services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION}
@@ -15,7 +21,8 @@ services:
     networks:
       - elk
     restart: unless-stopped
-    mem_limit: 1g
+    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-1g}
+    logging: *default-logging
     labels:
       co.elastic.logs/enabled: "false"
     healthcheck:
@@ -48,6 +55,7 @@ services:
       elasticsearch:
         condition: service_healthy
     restart: "no"
+    logging: *default-logging
 
   kibana:
     image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION}
@@ -67,7 +75,8 @@ services:
       kibana-user-setup:
         condition: service_completed_successfully
     restart: unless-stopped
-    mem_limit: 256m
+    mem_limit: 1g
+    logging: *default-logging
     labels:
       co.elastic.logs/enabled: "false"
 
@@ -93,7 +102,8 @@ services:
       elasticsearch:
         condition: service_healthy
     restart: unless-stopped
-    mem_limit: 128m
+    mem_limit: 256m
+    logging: *default-logging
     labels:
       co.elastic.logs/enabled: "false"
 

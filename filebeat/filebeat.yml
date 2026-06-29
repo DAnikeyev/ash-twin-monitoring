@@ -12,6 +12,26 @@ filebeat.autodiscover:
         type: container
         paths:
           - /var/lib/docker/containers/${data.container.id}/*.log
+        # Group records that span several stdout lines (e.g. .NET/NLog stack
+        # traces). A new event begins on any line starting with a timestamp or
+        # a JSON object (`{`); stack-trace frames and indented continuation
+        # lines are appended to the previous event.
+        multiline:
+          type: pattern
+          pattern: '^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}|^\{'
+          negate: true
+          match: after
+          timeout: 5s
+          max_lines: 1000
+        # NLog JSON layout writes one JSON document per line. Decode it into
+        # queryable top-level fields; non-JSON lines pass through unchanged.
+        processors:
+          - decode_json_fields:
+              fields: ["message"]
+              target: ""
+              overwrite_keys: true
+              process_array: false
+              max_depth: 1
 
 # Enrich every log event with Docker metadata (image, container name, labels, etc.)
 processors:

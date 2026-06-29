@@ -62,15 +62,17 @@ Each container has a Docker memory cap (set in `docker-compose.yml`):
 
 | Container       | `mem_limit` |
 |-----------------|-------------|
-| elasticsearch   | 1536 MB     |
+| elasticsearch   | `ELASTICSEARCH_MEM_LIMIT` (default `1 GB`) |
 | kibana          | 1024 MB     |
 | filebeat        | 256 MB      |
 
-Elasticsearch heap is additionally capped by `ES_JAVA_OPTS` in `.env` (default `-Xms512m -Xmx512m`).
+Elasticsearch heap is additionally capped by `ES_JAVA_OPTS` in `.env` (default `-Xms384m -Xmx384m`).
+
+All containers in this Compose file also use Docker JSON log rotation with `DOCKER_LOG_MAX_SIZE=10m` and `DOCKER_LOG_MAX_FILE=1`, so only the latest rotated file is kept locally for each stack container.
 
 ## Log retention (ILM)
 
-An ILM policy (`docker-logs-policy`) auto-deletes log indices older than **30 days**. It is created once via `scripts/setup-ilm.sh` and attached to the `docker-logs` index template.
+An ILM policy (`docker-logs-policy`) auto-deletes log indices older than the `DOCKER_LOG_RETENTION` value in `.env` (default **1 day**). It is created once via `scripts/setup-ilm.sh` and attached to the `docker-logs` index template.
 
 To re-run after a fresh Elasticsearch (e.g. after `docker compose down -v`):
 
@@ -79,7 +81,7 @@ To re-run after a fresh Elasticsearch (e.g. after `docker compose down -v`):
 bash /opt/ash-twin/scripts/setup-ilm.sh
 ```
 
-To change retention, edit the `min_age` value in `scripts/setup-ilm.sh` and re-run it.
+To change retention, update `DOCKER_LOG_RETENTION` in `.env` and re-run the script.
 
 The monitoring stack's own containers (elasticsearch, kibana, filebeat) are excluded from log collection via the `co.elastic.logs/enabled: "false"` Docker label to avoid a feedback loop.
 
